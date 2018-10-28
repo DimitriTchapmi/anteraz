@@ -1,0 +1,32 @@
+---
+# Roles to auth ansible playbook to Azure API Rest
+
+- name: Authorization
+  uri:
+    url: "https://login.microsoftonline.com/{{ azure_tenant}}/oauth2/token"
+    method: POST
+    status_code: 200
+    body_format: raw
+    body: "resource={{ 'https://management.azure.com/'|urlencode }}&client_id={{ azure_client_id|urlencode }}&grant_type=client_credentials&client_secret={{ azure_secret|urlencode }}"
+    timeout: 30 
+    return_content: yes
+    headers: 
+      "Content-Type": "application/x-www-form-urlencoded"
+  register: authresp
+  tags: ['auth']
+
+- name: Dump authorisation output
+  debug:
+    msg: "{{ authresp.json }}"
+
+- name: Set Bearer token
+  set_fact:
+    bearer: '{{ authresp.json.access_token }}'
+
+- name: Dump authorisation output
+  debug:
+    msg: "{{ bearer }}"
+
+- debug: msg="My Secret value is {{azure_secret | replace('\n', '')}}"
+
+

@@ -1,0 +1,78 @@
+---
+
+  - name: set terraform env
+    shell: |
+      export ARM_SUBSCRIPTION_ID="{{ subscription_id }}"
+      export ARM_CLIENT_ID="{{ azure_client_id }}"
+      export ARM_CLIENT_SECRET="{{ azure_client_secret }}"
+      export ARM_TENANT_ID="{{ azure_tenant }}"
+    register: terraform_env
+
+  - name: set terraform remote backend
+    shell: ( cd ../terraform ; no | terraform init -backend-config={{ env }}/backend.tfvars)
+
+  - name: terraform edit
+    terraform:
+      project_path: "../terraform/"
+      variables:
+          resource_group_name: "anteraz_{{ env }}"
+          env: "{{ env }}"
+      state: "{{ state }}"
+    register: outputs_tf
+
+
+  - block:
+
+    - name: Generate AuthToken Database
+      command: "{{ playbook_dir }}/roles/cosmos/files/generateTokenDatabase.py {{ outputs_tf.outputs.cosmos_primary_key.value }}"
+      register: script_result_database
+
+    - name: Generate AuthToken Collection
+      command: "{{ playbook_dir }}/roles/cosmos/files/generateTokenCollection.py {{ outputs_tf.outputs.cosmos_primary_key.value }} tododb"
+      register: script_result_coll
+
+    - debug:
+        msg:
+          - "authMet: {{ script_result_database.stdout.split(';')[0]}}"
+          - "dateMet: {{ script_result_database.stdout.split(';')[1]  }}"
+          - "authDD: {{ script_result_coll.stdout.split(';')[0]}}"
+          - "dateDD: {{ script_result_coll.stdout.split(';')[1] }}"
+
+    - name: Create Database
+      uri :
+        url: "https://{{ outputs_tf.outputs.cosmosdb_name.value }}.documents.azure.com/dbs"
+        method: POST
+        status_code: 200, 201, 409
+        body_format: json
+        timeout: 30
+        return_content: yes
+        headers :
+          "Accept": "application/json,version=2"
+          "Content-Type": "application/json"
+          "Authorization": "{{ script_result_database.stdout.split(';')[0] }}"
+          "x-ms-version": "2016-07-11"
+          "x-ms-date": "{{ script_result_database.stdout.split(';')[1] }}"
+        body: "{{ lookup('file','tododb.json') }}"
+      register: create_db
+      changed_when: (create_db.status == 200) or (create_db.status == 201)
+      when: script_result_database is defined
+
+
+    - name: Create collection
+      uri :
+        url: "https://{{ outputs_tf.outputs.cosmosdb_name.value }}.documents.azure.com/dbs/tododb/colls"
+        method: POST
+        status_code: 200, 201, 409
+        body_format: json
+        timeout: 30
+        return_content: yes
+        headers :
+          "Accept": "application/json,version=2"
+          "Content-Type": "application/x-www-form-urlencoded"
+          "Authorization": "{{ script_result_coll.stdout.split(';')[0] }}"
+          "x-ms-version": "2016-07-11"
+          "x-ms-date": "{{ script_result_coll.stdout.split(';')[1] }}"
+        body: "{{ lookup('file','todocoll.json') }}"
+      register: create_coll
+      changed_when: (create_coll.status == 200) or (create_coll.status == 201)
+      when: script_result_coll is defined

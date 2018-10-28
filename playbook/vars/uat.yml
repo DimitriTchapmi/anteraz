@@ -1,0 +1,7 @@
+---
+# Auth Rest API
+azure_client_id: ***
+azure_tenant: ***
+subscription_id: ***
+azure_client_secret: ***
+env: uat

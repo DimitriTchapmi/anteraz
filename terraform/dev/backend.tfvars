@@ -1,0 +1,5 @@
+resource_group_name  = "anteraz_admin"
+storage_account_name = "terrabackend"
+container_name       = "tfstatebackend"
+access_key           = "***"
+key                  = "dev/terraform.tfstate"
